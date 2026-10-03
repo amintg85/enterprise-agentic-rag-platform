@@ -1,0 +1,38 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-enterprise_ai}
+      POSTGRES_USER: ${POSTGRES_USER:-enterprise}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-enterprise}
+    ports: ["5432:5432"]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./backend/src/main/resources/db/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-enterprise}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes: [redisdata:/data]
+  backend:
+    build: ./backend
+    profiles: ["full"]
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-enterprise_ai}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-enterprise}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-enterprise}
+      SPRING_DATA_REDIS_HOST: redis
+      JWT_SECRET: ${JWT_SECRET}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+    ports: ["8080:8080"]
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_started}
+volumes:
+  pgdata:
+  redisdata:
